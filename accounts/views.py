@@ -112,7 +112,7 @@ def decline_invitation(request, inv_id):
 
     if request.method == "POST":
         invitation = get_object_or_404(Invitation, id=inv_id, target_user=user)
-        invitation.status = "declined"
+        invitation.invitation_status = "declined"
         invitation.save()
 
     return redirect(request.META.get("HTTP_REFERER", "profile"))

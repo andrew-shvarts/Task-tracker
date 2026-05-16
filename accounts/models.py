@@ -5,11 +5,14 @@ from django.contrib.auth.models import (
     BaseUserManager,
     PermissionsMixin,
 )
+from django.core.exceptions import ImproperlyConfigured
 from django.db import models
 from django.utils import timezone
 
-
 PASSWORD_PEPPER = os.environ.get("PASSWORD_PEPPER")
+if not PASSWORD_PEPPER:
+    raise ImproperlyConfigured("PASSWORD_PEPPER must be set")
+
 
 class TicketUserEngine(BaseUserManager):
     def create_user(self, email, password=None, **extra_fields):
@@ -29,6 +32,7 @@ class TicketUserEngine(BaseUserManager):
         if extra_fields.get("is_superuser") is not True:
             raise ValueError("Superuser must have is_superuser=True")
         return self.create_user(email, password, **extra_fields)
+
 
 class TicketsUser(AbstractUser, PermissionsMixin):
     email = models.EmailField(unique=True)

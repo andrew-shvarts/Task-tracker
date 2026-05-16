@@ -108,6 +108,12 @@ class Ticket(models.Model):
     def __str__(self):
         return f"{self.title} ({self.get_status_display()})"
 
+    def clean(self):
+        if self.due_date and self.due_date < timezone.now():
+            raise ValidationError(
+                {"due_date": "Due date cannot be in the past."}
+            )
+
 
 class SubTask(models.Model):
     ticket = models.ForeignKey(

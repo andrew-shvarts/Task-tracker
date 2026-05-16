@@ -14,7 +14,7 @@ def group_access_required(view_func):
         if not (
             request.user == group.owner or request.user in group.members.all()
         ):
-            return PermissionDenied("No access to this group")
+            raise PermissionDenied("No access to this group")
 
         return view_func(request, group_id, *args, group=group, **kwargs)
 

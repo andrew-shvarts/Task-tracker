@@ -39,7 +39,7 @@ services:
     build:
       context: .
       dockerfile: docker/tracker_web/Dockerfile
-    command: celery -A tracker worker -l info
+    command: celery -A taskboard worker -l info
     env_file:
       - .env
     environment:
