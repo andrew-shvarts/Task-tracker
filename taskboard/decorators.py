@@ -8,6 +8,12 @@ from django.http import HttpResponse
 
 logger = logging.getLogger("tracker")
 
+RETRYABLE_EXCEPTIONS = (
+    OSError,
+    TimeoutError,
+    ConnectionError,
+)
+
 
 def rate_limit(
     key_prefix: str,
@@ -75,14 +81,16 @@ def retry(max_attempts: int = 3, delay: float = 1.0, backoff: float = 2.0):
             for attempt in range(1, max_attempts + 1):
                 try:
                     return func(*args, **kwargs)
-                except Exception:
+                except RETRYABLE_EXCEPTIONS as e:
                     if attempt == max_attempts:
                         logger.exception(
                             f"{func.__name__} failed after {max_attempts} attempts"
                         )
                         raise
                     else:
-                        logger.warning(f"Retry {attempt}/{max_attempts}")
+                        logger.warning(
+                            f"Retry {attempt}/{max_attempts}: {type(e).__name__}: {e}"
+                        )
                         time.sleep(_delay / 2 + random.uniform(0, _delay / 2))
                         _delay *= backoff
 

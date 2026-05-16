@@ -9,10 +9,8 @@ from django.http import HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
-from django.views.decorators.cache import cache_page
 from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.http import require_POST
-from django.views.decorators.vary import vary_on_cookie
 
 from accounts.models import TicketsUser
 from taskboard.decorators import rate_limit, retry
@@ -34,8 +32,6 @@ from .models import (
 )
 
 
-@cache_page(60 * 2)
-@vary_on_cookie
 @login_required
 def group_list(request):
     user = request.user
@@ -95,8 +91,6 @@ def create_group(request):
     )
 
 
-@cache_page(60 * 2)
-@vary_on_cookie
 @login_required
 @group_access_required
 def group_view(request, group_id, group=None):
@@ -146,7 +140,7 @@ def edit_group(request, group_id, group=None):
                 prtctd_group.description = form.cleaned_data.get("description")
                 prtctd_group.save()
 
-            return redirect("group_detail", group_id=prtctd_group.id)
+            return redirect("group_view", group_id=prtctd_group.id)
     else:
         form = GroupForm(instance=group)
 
@@ -167,7 +161,7 @@ def edit_group(request, group_id, group=None):
 def delete_group_member(request, group_id, pk, group=None):
     user = request.user
 
-    if user.id == group.owner.id and pk in group.attached_groups.all():
+    if user.id == group.owner.id and group.members.filter(id=pk).exists():
         group.members.remove(pk)
 
     return redirect(request.META.get("HTTP_REFERER", reverse("group_view")))
@@ -189,11 +183,7 @@ def leave_group_member(request, group_id):
     else:
         messages.error(request, "Group owners cannot leave their own group.")
 
-    return redirect(
-        request.META.get(
-            "HTTP_REFERER", reverse("group_list", args=[group_id])
-        )
-    )
+    return redirect(request.META.get("HTTP_REFERER", reverse("group_list")))
 
 
 @login_required
@@ -270,22 +260,23 @@ def user_email_autocomplete(request):
 @retry(max_attempts=3)
 def send_invitation(request, group_id, group=None):
     current_user = request.user
-    emails = request.POST.get("emails", "").strip()
 
+    if group.owner.id != current_user.id:
+        return HttpResponseForbidden(
+            "You don't have permission to send invitations"
+        )
+
+    emails = request.POST.get("emails", "").strip()
     if emails:
-        if group.owner.id == current_user.id:
-            for email in [e.strip() for e in emails.split(",") if e.strip()]:
-                user = get_object_or_404(TicketsUser, email=email)
+        for email in [e.strip() for e in emails.split(",") if e.strip()]:
+            user = TicketsUser.objects.filter(email=email).first()
+            if user:
                 Invitation.objects.create(
                     owner=current_user,
                     target_user=user,
                     target_group=group,
                     invitation_type="group",
                 )
-        else:
-            messages.error(
-                request, "You don't have permission to send invitation"
-            )
 
     return redirect(
         request.META.get(
@@ -315,12 +306,10 @@ def group_delete(request, group_id, pk, group=None):
     )
 
 
-@cache_page(60 * 2)
-@vary_on_cookie
 @login_required
 def project_list(request):
     user = request.user
-    projects = user.projects.filter(members=user.id)
+    projects = user.projects.all()
     owned_projects = user.owned_projects.all()
 
     return render(
@@ -367,8 +356,6 @@ def create_project(request, group_id, group=None):
     return render(request, "projects/create_project.html", {"form": form})
 
 
-@cache_page(60 * 2)
-@vary_on_cookie
 @login_required
 @project_access_required
 def project_details(request, project_id, project=None):
@@ -412,8 +399,6 @@ def project_details(request, project_id, project=None):
     )
 
 
-@cache_page(60 * 2)
-@vary_on_cookie
 @login_required
 def ticket_list(request):
     user = request.user
@@ -427,6 +412,7 @@ def ticket_list(request):
 @require_POST
 @csrf_protect
 @rate_limit("update_task_status", limit=20, period=60)
+@login_required
 @project_access_required
 @retry(max_attempts=3)
 def update_task_status(request, project_id, project=None):
